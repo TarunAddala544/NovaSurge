@@ -1,0 +1,42 @@
+{
+  "order-service::pod_restart": [
+    {
+      "success": true,
+      "ts": "2026-03-27T17:24:29.119185"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-27T17:26:25.510010"
+    }
+  ],
+  "order-service::cache_flush": [
+    {
+      "success": false,
+      "ts": "2026-03-27T18:42:03.195038+00:00"
+    }
+  ],
+  "payment-service::hpa_scaleout": [
+    {
+      "success": true,
+      "ts": "2026-03-27T18:44:54.862592+00:00"
+    }
+  ],
+  "product-service::hpa_scaleout": [
+    {
+      "success": true,
+      "ts": "2026-03-27T18:47:46.454705+00:00"
+    }
+  ],
+  "order-service::traffic_reroute": [
+    {
+      "success": false,
+      "ts": "2026-03-27T18:50:38.459924+00:00"
+    }
+  ],
+  "payment-service::cache_flush": [
+    {
+      "success": false,
+      "ts": "2026-03-27T18:53:30.786346+00:00"
+    }
+  ]
+}
