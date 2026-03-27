@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+websockets
+torch
+scikit-learn
+pandas
+numpy
+prometheus-api-client
+httpx
+watchdog
