@@ -1,0 +1,22 @@
+fullnameOverride: redis-service
+
+auth:
+  enabled: false
+
+master:
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  persistence:
+    enabled: true
+    size: 2Gi
+  service:
+    type: ClusterIP
+    port: 6379
+
+replica:
+  replicaCount: 0
