@@ -2,15 +2,27 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas;
+/* ── Base ─────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: #0f172a;
+  color: #f1f5f9;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* ── Reasoning Feed fade-in ───────────────────────── */
 @keyframes fadeIn {
   from {
     opacity: 0;
-    transform: translateY(-5px);
+    transform: translateY(-6px);
   }
   to {
     opacity: 1;
@@ -19,5 +31,45 @@ body {
 }
 
 .animate-fadeIn {
-  animation: fadeIn 0.3s ease-in;
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* ── Node glow pulse (D3 graph anomaly) ───────────── */
+@keyframes glowPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px #ef4444) drop-shadow(0 0 8px #ef4444);
+  }
+  50% {
+    filter: drop-shadow(0 0 12px #ef4444) drop-shadow(0 0 24px #ef4444);
+  }
+}
+
+.node-anomaly-glow {
+  animation: glowPulse 1.2s ease-in-out infinite;
+}
+
+/* ── Edge dash animation ──────────────────────────── */
+@keyframes dashFlow {
+  from { stroke-dashoffset: 0; }
+  to   { stroke-dashoffset: -20; }
+}
+
+.edge-degraded {
+  animation: dashFlow 0.8s linear infinite;
+}
+
+/* ── Scrollbar styling ────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
 }

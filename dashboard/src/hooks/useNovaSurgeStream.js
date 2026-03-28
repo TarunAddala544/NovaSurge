@@ -1,55 +1,100 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { MOCK_STREAM } from "../constants/mockData";
 
+const WS_URL = "ws://localhost:8000/ws/stream";
+const RECONNECT_MS = 3000;
+const BUFFER_SIZE = 60;
+const MOCK_INTERVAL_MS = 2000;
+
 export default function useNovaSurgeStream() {
-  const [data, setData] = useState(null);
+  const [streamData, setStreamData] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState(null);
+  const [buffer, setBuffer] = useState([]);
+
+  const wsRef = useRef(null);
+  const reconnectTimer = useRef(null);
+  const mockTimer = useRef(null);
+  const isConnected = useRef(false);
+
+  const pushToBuffer = useCallback((msg) => {
+    setBuffer((prev) => {
+      const next = [...prev, msg];
+      return next.slice(-BUFFER_SIZE);
+    });
+    setStreamData(msg);
+    setLastUpdate(new Date());
+  }, []);
+
+  const stopMock = useCallback(() => {
+    if (mockTimer.current) {
+      clearInterval(mockTimer.current);
+      mockTimer.current = null;
+    }
+  }, []);
+
+  const startMock = useCallback(() => {
+    if (mockTimer.current) return; // already running
+    mockTimer.current = setInterval(() => {
+      if (!isConnected.current) {
+        pushToBuffer(MOCK_STREAM());
+      }
+    }, MOCK_INTERVAL_MS);
+  }, [pushToBuffer]);
+
+  const connect = useCallback(() => {
+    try {
+      const ws = new WebSocket(WS_URL);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        console.log("✅ WebSocket connected to backend");
+        isConnected.current = true;
+        setConnected(true);
+        stopMock(); // stop mock when real WS comes up
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const parsed = JSON.parse(event.data);
+          pushToBuffer(parsed);
+        } catch (e) {
+          console.warn("Failed to parse WebSocket message", e);
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("❌ WebSocket disconnected. Retrying in 3s...");
+        isConnected.current = false;
+        setConnected(false);
+        startMock(); // fall back to mock
+        reconnectTimer.current = setTimeout(connect, RECONNECT_MS);
+      };
+
+      ws.onerror = () => {
+        ws.close();
+      };
+    } catch (err) {
+      console.warn("WebSocket error:", err);
+      isConnected.current = false;
+      setConnected(false);
+      startMock();
+      reconnectTimer.current = setTimeout(connect, RECONNECT_MS);
+    }
+  }, [pushToBuffer, startMock, stopMock]);
 
   useEffect(() => {
-    let ws;
-
-    function connect() {
-      try {
-        ws = new WebSocket("ws://localhost:8000/ws/stream");
-
-        ws.onopen = () => {
-          console.log("✅ Connected to backend");
-          setConnected(true);
-        };
-
-        ws.onmessage = (event) => {
-          const parsed = JSON.parse(event.data);
-          setData(parsed);
-        };
-
-        ws.onclose = () => {
-          console.log("❌ Disconnected. Retrying...");
-          setConnected(false);
-          setTimeout(connect, 3000);
-        };
-
-        ws.onerror = () => {
-          ws.close();
-        };
-
-      } catch (error) {
-        console.log("WebSocket error:", error);
-        setConnected(false);
-      }
-    }
-
+    // Start with mock immediately so something shows
+    startMock();
+    // Attempt WebSocket connection
     connect();
 
-    // ✅ ALWAYS UPDATE MOCK DATA (no blocking)
-    const interval = setInterval(() => {
-      setData(MOCK_STREAM());
-    }, 2000);
-
     return () => {
-      clearInterval(interval);
-      if (ws) ws.close();
+      stopMock();
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (wsRef.current) wsRef.current.close();
     };
-  }, []); // ❗ run only once
+  }, [connect, startMock, stopMock]);
 
-  return { data, connected };
+  return { streamData, connected, lastUpdate, buffer };
 }

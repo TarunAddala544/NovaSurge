@@ -1,52 +1,70 @@
-export default function HealthGrid({ scores }) {
-  if (!scores) return null;
+const SERVICES = [
+  "api-gateway",
+  "product-service",
+  "order-service",
+  "payment-service",
+  "notification-service",
+];
 
-  const getStatus = (score) => {
-    if (score < -0.5) return "anomaly";
-    if (score < -0.2) return "warning";
-    return "healthy";
-  };
+function getStatus(score) {
+  if (score < -0.15) return "ANOMALY";
+  if (score <= -0.1) return "DEGRADED";
+  return "HEALTHY";
+}
 
-  const getColor = (status) => {
-    if (status === "anomaly") return "bg-red-500";
-    if (status === "warning") return "bg-yellow-500";
-    return "bg-green-500";
-  };
+function getScoreColor(score) {
+  if (score < -0.15) return "text-red-400";
+  if (score <= -0.1)  return "text-amber-400";
+  return "text-emerald-400";
+}
+
+function getStatusPill(status) {
+  switch (status) {
+    case "ANOMALY":  return "bg-red-600 text-white";
+    case "DEGRADED": return "bg-amber-500 text-black";
+    default:         return "bg-emerald-700 text-white";
+  }
+}
+
+function getCardBg(status) {
+  if (status === "ANOMALY") return "bg-slate-900 border border-red-600 animate-pulse";
+  if (status === "DEGRADED") return "bg-slate-900 border border-amber-500";
+  return "bg-slate-900 border border-slate-700";
+}
+
+export default function HealthGrid({ streamData }) {
+  const scores = streamData?.scores ?? {};
 
   return (
-    <div className="h-full flex flex-col">
-      {/* <h2 className="text-lg font-bold mb-2">System Health</h2> */}
+    <div className="h-full grid grid-cols-2 gap-2 content-start">
+      {SERVICES.map((svc, idx) => {
+        const score = scores[svc] ?? 0;
+        const status = getStatus(score);
+        // notification-service spans full width (last item, index 4)
+        const spanClass = idx === 4 ? "col-span-2" : "";
 
-      <div className="grid grid-cols-2 gap-2">
-        {Object.entries(scores).map(([service, score]) => {
-          const status = getStatus(score);
-
-          return (
-            <div
-              key={service}
-              className={`p-3 rounded bg-[#0f172a] border border-slate-700 ${
-                status === "anomaly" ? "animate-pulse" : ""
-              }`}
-            >
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-sm font-semibold">{service}</span>
-
-                <span
-                  className={`w-3 h-3 rounded-full ${getColor(status)}`}
-                ></span>
-              </div>
-
-              <div className="text-xs text-gray-400">
-                Score: {score.toFixed(3)}
-              </div>
-
-              <div className="text-xs mt-1 capitalize text-gray-300">
-                Status: {status}
-              </div>
+        return (
+          <div
+            key={svc}
+            className={`p-3 rounded-lg ${getCardBg(status)} ${spanClass}`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-bold text-slate-200 truncate pr-1">
+                {svc}
+              </span>
+              <span
+                className={`px-1.5 py-0.5 text-[10px] font-semibold rounded ${getStatusPill(status)}`}
+              >
+                {status}
+              </span>
             </div>
-          );
-        })}
-      </div>
+
+            <div className={`text-2xl font-mono font-bold ${getScoreColor(score)}`}>
+              {score.toFixed(2)}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
