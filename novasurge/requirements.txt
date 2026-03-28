@@ -1,0 +1,40 @@
+# NovaSurge — Complete Python Dependencies
+# Install: pip install -r novasurge/requirements.txt
+
+# ── Core Framework ────────────────────────────────────────────────────────────
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+
+# ── HTTP Clients ─────────────────────────────────────────────────────────────
+httpx>=0.27.0
+requests>=2.31.0
+
+# ── Kubernetes ─────────────────────────────────────────────────────────────────
+kubernetes>=29.0.0
+
+# ── Databases ──────────────────────────────────────────────────────────────────
+redis>=5.0.0
+sqlalchemy>=2.0.0
+psycopg2-binary>=2.9.9
+
+# ── Data Science / ML ─────────────────────────────────────────────────────────
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+torch>=2.0.0
+
+# ── Prometheus ─────────────────────────────────────────────────────────────────
+prometheus-client>=0.19.0
+
+# ── Validation / Settings ────────────────────────────────────────────────────
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+python-json-logger>=2.0.7
+
+# ── Development / Testing (optional) ─────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+flake8>=6.1.0
+black>=23.0.0

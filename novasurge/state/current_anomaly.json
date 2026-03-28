@@ -1,0 +1,12 @@
+{
+  "anomaly_detected": false,
+  "affected_service": null,
+  "anomaly_type": null,
+  "severity_score": 0.0,
+  "iforest_score": 0.0,
+  "lstm_reconstruction_error": 0.0,
+  "feature_deltas": {},
+  "detected_at": null,
+  "rca_result": null,
+  "decision": null
+}
