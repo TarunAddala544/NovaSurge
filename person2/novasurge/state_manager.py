@@ -105,7 +105,7 @@ def was_recently_failed(service: str, remediation: str, window_seconds: int = 12
 # ─── Round status board ───────────────────────────────────────────────────────
 
 VALID_STATUSES = {
-    "INJECTING", "DETECTING", "ANALYZING",
+    "PREFLIGHT", "INJECTING", "DETECTING", "ANALYZING",
     "DECIDING", "RECOVERING", "HEALTHY", "FAILED",
 }
 

@@ -1,25 +1,25 @@
 """
 novasurge/decision_engine.py
 
-Maps anomaly types to remediations, applies 4 guardrails, and returns a
-full decision dict.
+Maps anomaly types to remediations, applies 4 guardrails, confidence
+scoring via SQLite history, and returns a full decision dict.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
-import time
-from datetime import datetime, timezone
-from typing import Any
 
 from novasurge.k8s_client import get_clients, NAMESPACE
 from novasurge.state_manager import (
     is_active,
     mark_active,
-    was_recently_failed,
     get_active_count,
     get_all_active_services,
+)
+from novasurge.state_db import (
+    get_historical_success_rate,
+    get_recent_failed_remediations,
+    record_guardrail,
 )
 
 # ── Decision map ──────────────────────────────────────────────────────────────
@@ -42,12 +42,39 @@ BUSINESS_IMPACT: dict[str, int] = {
     "notification-service":   2,
 }
 
-# Cascade protection threshold
 CASCADE_THRESHOLD = 2
+CONFIDENCE_THRESHOLD = 0.4
 
 
+# ── Confidence scoring ────────────────────────────────────────────────────────
+def compute_confidence(
+    service: str,
+    remediator: str,
+    rca_confidence: float,
+    blast_radius_score: int = 0,
+) -> float:
+    """
+    confidence = historical_success_rate
+                 x rca_confidence
+                 x (1 - normalized_blast_risk x 0.3)
+
+    Falls back to 0.7 prior when no SQLite history exists yet.
+    Returns float 0.0-1.0.
+    """
+    historical_rate = get_historical_success_rate(service, remediator)
+    blast_risk = min(blast_radius_score / 5.0, 1.0)
+    confidence = historical_rate * rca_confidence * (1 - blast_risk * 0.3)
+    confidence = round(max(0.0, min(confidence, 1.0)), 3)
+    print(
+        f"[decision_engine] Confidence for '{remediator}' on '{service}': {confidence:.3f} "
+        f"(historical={historical_rate:.2f}, rca_conf={rca_confidence:.2f}, "
+        f"blast_risk={blast_risk:.2f})"
+    )
+    return confidence
+
+
+# ── Replica helper ────────────────────────────────────────────────────────────
 def _get_current_replicas(service: str) -> int:
-    """Return the current ready replica count for a service (best-effort)."""
     try:
         _, apps_v1, _, _ = get_clients()
         dep = apps_v1.read_namespaced_deployment(name=service, namespace=NAMESPACE)
@@ -56,9 +83,17 @@ def _get_current_replicas(service: str) -> int:
         return 2  # safe default
 
 
-def decide(anomaly_payload: dict, rca_result: dict) -> dict:
+# ── Main decide function ──────────────────────────────────────────────────────
+def decide(
+    anomaly_payload: dict,
+    rca_result: dict,
+    round_num: int = 0,
+    blast_radius_score: int = 0,
+    metrics_snapshot: dict | None = None,
+) -> dict:
     """
-    Build a remediation decision with full guardrail processing.
+    Build a remediation decision with full guardrail processing
+    and confidence scoring.
 
     Returns
     -------
@@ -68,13 +103,17 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
         "priority":              float,
         "primary_remediation":   str,
         "fallback_remediation":  str,
+        "confidence":            float,
         "guardrails_triggered":  list[str],
         "reasoning_text":        str,
     }
     """
-    service = rca_result.get("true_origin", anomaly_payload.get("affected_service", "unknown"))
+    service = rca_result.get(
+        "true_origin", anomaly_payload.get("affected_service", "unknown")
+    )
     anomaly_type = anomaly_payload.get("anomaly_type", "high_latency")
     severity = float(anomaly_payload.get("severity_score", 0.5))
+    rca_confidence = float(rca_result.get("confidence", 0.7))
 
     impact_weight = BUSINESS_IMPACT.get(service, 5)
     priority = round(impact_weight * severity, 4)
@@ -99,12 +138,13 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
         print(f"[decision_engine] {msg}")
         guardrails_triggered.append("G1_DUPLICATE_BLOCKED")
         reasoning_lines.append(msg)
+        record_guardrail(round_num, 1, service, primary, "BLOCKED", msg)
         return _build_result(
             service, anomaly_type, priority,
-            primary="BLOCKED",
-            fallback=fallback,
+            primary="BLOCKED", fallback=fallback,
             guardrails=guardrails_triggered,
             reasoning=reasoning_lines,
+            confidence=0.0,
         )
 
     # ── GUARDRAIL 2: Minimum replica safety ───────────────────────────────────
@@ -119,11 +159,12 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
             print(f"[decision_engine] {msg}")
             guardrails_triggered.append("G2_REPLICA_SAFETY")
             reasoning_lines.append(msg)
+            record_guardrail(round_num, 2, service, "pod_restart", "hpa_scaleout", msg)
             primary = "hpa_scaleout"
             fallback = "pod_restart"
 
-    # ── GUARDRAIL 3: Recent failure memory ────────────────────────────────────
-    if was_recently_failed(service, primary, window_seconds=120):
+    # ── GUARDRAIL 3: Recent failure memory (SQLite-backed) ──────────────────
+    if get_recent_failed_remediations(service, primary, within_seconds=120):
         msg = (
             f"Guardrail 3 TRIGGERED: recent failure memory — '{primary}' on '{service}' "
             f"failed within the last 120s. Switching to fallback '{fallback}'."
@@ -131,17 +172,17 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
         print(f"[decision_engine] {msg}")
         guardrails_triggered.append("G3_RECENT_FAILURE_FALLBACK")
         reasoning_lines.append(msg)
-        primary, fallback = fallback, primary  # swap
+        record_guardrail(round_num, 3, service, primary, fallback, msg)
+        primary, fallback = fallback, primary
 
     # ── GUARDRAIL 4: Cascade protection ───────────────────────────────────────
     active_count = get_active_count()
     if active_count >= CASCADE_THRESHOLD:
         all_active = get_all_active_services()
-        # Find the highest-priority active service among all active + current
         candidates = {service: priority}
         for active_svc in all_active:
             active_impact = BUSINESS_IMPACT.get(active_svc, 5)
-            candidates[active_svc] = active_impact * severity  # approximate
+            candidates[active_svc] = active_impact * severity
 
         highest_priority_svc = max(candidates, key=lambda s: candidates[s])
         if highest_priority_svc != service:
@@ -153,12 +194,13 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
             print(f"[decision_engine] {msg}")
             guardrails_triggered.append("G4_CASCADE_DEFER_30S")
             reasoning_lines.append(msg)
+            record_guardrail(round_num, 4, service, primary, "DEFERRED_30S", msg)
             return _build_result(
                 service, anomaly_type, priority,
-                primary="DEFERRED_30S",
-                fallback=fallback,
+                primary="DEFERRED_30S", fallback=fallback,
                 guardrails=guardrails_triggered,
                 reasoning=reasoning_lines,
+                confidence=0.0,
             )
         else:
             msg = (
@@ -169,18 +211,34 @@ def decide(anomaly_payload: dict, rca_result: dict) -> dict:
             guardrails_triggered.append("G4_CASCADE_HIGHEST_PRIORITY_PROCEED")
             reasoning_lines.append(msg)
 
+    # ── Confidence scoring ────────────────────────────────────────────────────
+    confidence = compute_confidence(service, primary, rca_confidence, blast_radius_score)
+
+    if confidence < CONFIDENCE_THRESHOLD:
+        msg = (
+            f"Confidence {confidence:.3f} below threshold {CONFIDENCE_THRESHOLD} "
+            f"— escalating from '{primary}' to fallback '{fallback}'."
+        )
+        print(f"[decision_engine] {msg}")
+        reasoning_lines.append(msg)
+        primary, fallback = fallback, primary
+        confidence = compute_confidence(
+            service, primary, rca_confidence, blast_radius_score
+        )
+
     # ── Final decision ────────────────────────────────────────────────────────
     reasoning_lines.append(
         f"Final decision: apply '{primary}' on '{service}' "
-        f"(fallback='{fallback}', guardrails={guardrails_triggered or 'none'})."
+        f"(fallback='{fallback}', confidence={confidence:.3f}, "
+        f"guardrails={guardrails_triggered or 'none'})."
     )
 
     return _build_result(
         service, anomaly_type, priority,
-        primary=primary,
-        fallback=fallback,
+        primary=primary, fallback=fallback,
         guardrails=guardrails_triggered,
         reasoning=reasoning_lines,
+        confidence=confidence,
     )
 
 
@@ -192,6 +250,7 @@ def _build_result(
     fallback: str,
     guardrails: list[str],
     reasoning: list[str],
+    confidence: float = 0.0,
 ) -> dict:
     return {
         "service": service,
@@ -199,12 +258,13 @@ def _build_result(
         "priority": priority,
         "primary_remediation": primary,
         "fallback_remediation": fallback,
+        "confidence": confidence,
         "guardrails_triggered": guardrails,
         "reasoning_text": " | ".join(reasoning),
     }
 
 
-# ── Standalone test ──────────────────────────────────────────────────────────
+# ── Standalone test ───────────────────────────────────────────────────────────
 if __name__ == "__main__":
     import os
     os.environ.setdefault("NOVASURGE_MOCK_K8S", "true")
@@ -222,5 +282,5 @@ if __name__ == "__main__":
         "reasoning": "order-service deviates independently",
     }
 
-    result = decide(sample_anomaly, sample_rca)
+    result = decide(sample_anomaly, sample_rca, round_num=1, blast_radius_score=1)
     print(json.dumps(result, indent=2))

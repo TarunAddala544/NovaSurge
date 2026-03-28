@@ -2,7 +2,7 @@
 novasurge/orchestrator.py
 
 5-round chaos engineering orchestration loop.
-Each round: inject → detect → analyze → decide → remediate → verify → log.
+Each round: preflight → inject → detect → analyze → decide → remediate → verify → log.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from novasurge.anomaly_client import poll_for_anomaly, build_mock_metrics_snapshot
+from novasurge.blast_radius import run_preflight
 from novasurge.chaos import failure_strategy
 from novasurge.chaos.injectors import (
     pod_deletion,
@@ -30,6 +31,14 @@ from novasurge.chaos.injectors import (
 from novasurge.decision_engine import decide
 from novasurge.remediators import REGISTRY as REMEDIATOR_REGISTRY
 from novasurge.rca import analyze as rca_analyze
+from novasurge.sla_tracker import evaluate_round_sla, generate_coverage_report
+from novasurge.state_db import (
+    init_db,
+    record_injection,
+    record_remediation_attempt,
+    complete_remediation,
+    upsert_round_summary,
+)
 from novasurge.state_manager import (
     write_round_status,
     mark_active,
@@ -107,22 +116,27 @@ def _print_summary(summaries: list[dict]) -> None:
     header = (
         f"\n{'='*110}\n"
         f"{'RND':>3}  {'INJECTOR':<22}  {'TARGET':<22}  {'REM':<18}  "
-        f"{'RECOVERY':>10}  {'HEALTHY':>8}  {'GUARDRAILS'}\n"
+        f"{'RECOVERY':>10}  {'SLA':>6}  {'HEALTHY':>8}  {'GUARDRAILS'}\n"
         f"{'-'*110}"
     )
     print(header)
     for s in summaries:
         guardrails = ", ".join(s.get("guardrails_triggered", [])) or "—"
+        sla = s.get("sla_result", {})
+        sla_str = "MET" if sla.get("recovery_met") else "MISS"
         print(
             f"{s['round']:>3}  {s['failure_type']:<22}  {s['target_service']:<22}  "
             f"{s['remediator']:<18}  {str(s.get('recovery_time_seconds', '?')):>10}s  "
-            f"{'YES' if s.get('health_confirmed') else 'NO':>8}  {guardrails}"
+            f"{sla_str:>6}  {'YES' if s.get('health_confirmed') else 'NO':>8}  {guardrails}"
         )
     print("=" * 110)
 
 
 # ── Main orchestration loop ───────────────────────────────────────────────────
-async def run() -> None:
+async def run(dry_run: bool = False) -> None:
+    # Init SQLite DB on startup
+    init_db()
+
     summaries: list[dict] = []
 
     for round_cfg in ROUNDS:
@@ -148,13 +162,42 @@ async def run() -> None:
             "recovery_time_seconds": None,
             "health_confirmed": False,
             "guardrails_triggered": [],
+            "preflight": None,
+            "sla_result": None,
         }
 
-        # ── a. INJECTING status ───────────────────────────────────────────
+        # ── a. Write initial INJECTING status before preflight ──────────────
         write_round_status(n, "INJECTING")
-        print(f"  ⟳  Round {n} status: INJECTING")
 
-        # ── b. failure_strategy.select_target() ──────────────────────────
+        # ── b. Pre-flight blast radius check ─────────────────────────────
+        write_round_status(n, "PREFLIGHT")
+
+        mock_metrics_preflight = build_mock_metrics_snapshot(
+            {"affected_service": hardcoded_target}
+        )
+        preflight = run_preflight(
+            target_service=hardcoded_target,
+            failure_type=injector_name,
+            metrics_snapshot=mock_metrics_preflight,
+            dry_run=dry_run,
+        )
+        round_log["preflight"] = preflight
+        print(f"[orchestrator] Preflight: {preflight['go_nogo']} | "
+              f"risk={preflight['injection_risk']} | "
+              f"blast_score={preflight['blast_score']} | "
+              f"affected_users={preflight['estimated_affected_users_pct']}%")
+
+        if preflight["go_nogo"] == "NO-GO":
+            print(f"[orchestrator] 🛑 NO-GO: {preflight['nogo_reason']}")
+            round_log["status"] = "SKIPPED_PREFLIGHT"
+            log_path = LOGS_DIR / f"round_{n}.json"
+            log_path.write_text(json.dumps(round_log, indent=2, default=str))
+            summaries.append(round_log)
+            continue
+
+        blast_score = preflight["blast_score"]
+
+        # ── c. failure_strategy.select_target() ──────────────────────────
         mock_metrics = {
             svc: {
                 "http_request_rate": 20.0 + i * 8,
@@ -171,20 +214,21 @@ async def run() -> None:
                 f"but using hardcoded target '{hardcoded_target}'"
             )
 
-        # ── c. Inject chaos ───────────────────────────────────────────────
+        # ── d. Inject chaos ───────────────────────────────────────────────
+        write_round_status(n, "INJECTING")
         injected_at = datetime.now(timezone.utc).isoformat()
         print(f"[orchestrator] Injecting {injector_name} into {hardcoded_target}")
         inject_result = injector_mod.inject(hardcoded_target)
         print(f"[orchestrator] Inject result: {json.dumps(inject_result, default=str)}")
         round_log["injected_at"] = injected_at
 
-        # ── d. DETECTING status ───────────────────────────────────────────
-        write_round_status(n, "DETECTING")
-        print(f"  ⟳  Round {n} status: DETECTING")
+        # Record injection in SQLite
+        record_injection(n, hardcoded_target, injector_name, details=inject_result)
 
-        # ── e. Poll for anomaly ───────────────────────────────────────────
-        # FIX: poll_for_anomaly is async — await it directly.
-        # FIX: correct kwarg names are timeout_seconds and poll_interval.
+        # ── e. DETECTING status ───────────────────────────────────────────
+        write_round_status(n, "DETECTING")
+
+        # ── f. Poll for anomaly ───────────────────────────────────────────
         print(f"[orchestrator] Polling for anomaly (timeout=60s)…")
         anomaly = await poll_for_anomaly(
             timeout_seconds=60,
@@ -205,52 +249,70 @@ async def run() -> None:
         round_log["anomaly_confirmed_at"] = anomaly_confirmed_at
         print(f"[orchestrator] Anomaly confirmed: {json.dumps(anomaly)}")
 
-        # ── f. ANALYZING status ───────────────────────────────────────────
+        # ── g. ANALYZING status ───────────────────────────────────────────
         write_round_status(n, "ANALYZING")
-        print(f"  ⟳  Round {n} status: ANALYZING")
 
-        # ── g. RCA ───────────────────────────────────────────────────────
+        # ── h. RCA ───────────────────────────────────────────────────────
         metrics_snapshot = build_mock_metrics_snapshot(anomaly)
         rca_result = rca_analyze(anomaly, metrics_snapshot)
         round_log["rca_result"] = rca_result
         print(f"[orchestrator] RCA → true_origin={rca_result['true_origin']} "
               f"confidence={rca_result['confidence']}")
 
-        # ── h. DECIDING status ────────────────────────────────────────────
+        # ── i. DECIDING status ────────────────────────────────────────────
         write_round_status(n, "DECIDING")
-        print(f"  ⟳  Round {n} status: DECIDING")
 
-        # ── i. Decision engine ────────────────────────────────────────────
-        decision = decide(anomaly, rca_result)
+        # ── j. Decision engine ────────────────────────────────────────────
+        decision = decide(
+            anomaly_payload=anomaly,
+            rca_result=rca_result,
+            round_num=n,
+            blast_radius_score=blast_score,
+        )
         round_log["decision"] = decision
         round_log["guardrails_triggered"] = decision.get("guardrails_triggered", [])
         primary_rem = decision["primary_remediation"]
         fallback_rem = decision["fallback_remediation"]
-        print(f"[orchestrator] Decision → primary='{primary_rem}' fallback='{fallback_rem}'")
+        print(f"[orchestrator] Decision → primary='{primary_rem}' "
+              f"fallback='{fallback_rem}' confidence={decision.get('confidence', '?')}")
         print(f"[orchestrator] Reasoning: {decision['reasoning_text']}")
 
-        # ── j. Guardrails already applied inside decide() ────────────────
+        # ── k. Handle blocked/deferred decisions ─────────────────────────
         if primary_rem in ("BLOCKED", "DEFERRED_30S"):
             print(f"[orchestrator] Primary remediation {primary_rem} — using fallback '{fallback_rem}'")
             primary_rem = fallback_rem
 
-        # ── k. RECOVERING status ──────────────────────────────────────────
+        # ── l. RECOVERING status ──────────────────────────────────────────
         write_round_status(n, "RECOVERING")
-        print(f"  ⟳  Round {n} status: RECOVERING")
         mark_active(hardcoded_target, primary_rem)
 
-        # ── l. Execute remediator ─────────────────────────────────────────
+        # ── m. Execute remediator ─────────────────────────────────────────
         remediator_fn = REMEDIATOR_REGISTRY.get(primary_rem)
         if remediator_fn is None:
             print(f"[orchestrator] ⚠ Unknown remediator '{primary_rem}'; trying fallback '{fallback_rem}'")
             remediator_fn = REMEDIATOR_REGISTRY.get(fallback_rem)
+            primary_rem = fallback_rem
 
         round_log["remediator"] = primary_rem
         rem_result: dict[str, Any] = {"success": False, "details": "remediator not found"}
 
+        # Track remediation in SQLite
+        remediation_id = record_remediation_attempt(
+            n, hardcoded_target, injector_name, primary_rem
+        )
+        rem_start = time.monotonic()
+
         if remediator_fn:
             rem_result = await remediator_fn(hardcoded_target)
             print(f"[orchestrator] Remediator result: {json.dumps(rem_result, default=str)}")
+
+        rem_elapsed = time.monotonic() - rem_start
+        complete_remediation(
+            remediation_id,
+            success=rem_result.get("success", False),
+            recovery_seconds=rem_elapsed,
+            error_message=None if rem_result.get("success") else str(rem_result.get("details")),
+        )
 
         record_remediation_result(
             hardcoded_target, primary_rem,
@@ -261,38 +323,68 @@ async def run() -> None:
         # ── Reverse injector side-effects where applicable ────────────────
         await _try_reverse(injector_name, injector_mod, hardcoded_target)
 
-        # ── m. Poll /health ───────────────────────────────────────────────
+        # ── n. Poll /health ───────────────────────────────────────────────
         health_ok, health_elapsed = await _wait_for_healthy(hardcoded_target)
         recovered_at = datetime.now(timezone.utc).isoformat()
 
-        # ── n. HEALTHY / FAILED status ────────────────────────────────────
+        # ── o. HEALTHY / FAILED status ────────────────────────────────────
         final_status = "HEALTHY" if health_ok else "FAILED"
         write_round_status(n, final_status, {
             "remediator": primary_rem,
             "health_confirmed": health_ok,
         })
-        print(f"  ⟳  Round {n} status: {final_status}")
         clear_active(hardcoded_target)
 
-        # ── o. Save round summary ─────────────────────────────────────────
+        # ── p. Save round summary ─────────────────────────────────────────
         round_log.update({
             "recovered_at": recovered_at,
             "recovery_time_seconds": rem_result.get("recovery_time_seconds", health_elapsed),
             "health_confirmed": health_ok,
+            "status": final_status,
         })
+
+        # SLA evaluation
+        sla_result = evaluate_round_sla(round_log)
+        round_log["sla_result"] = sla_result
+        print(
+            f"[orchestrator] SLA: {'MET ✓' if sla_result['recovery_met'] else 'MISSED ✗'} | "
+            f"target={sla_result['recovery_target_seconds']}s | "
+            f"actual={sla_result['recovery_actual_seconds']}s"
+        )
+
         log_path = LOGS_DIR / f"round_{n}.json"
         log_path.write_text(json.dumps(round_log, indent=2, default=str))
         print(f"[orchestrator] Round {n} log saved → {log_path}")
 
+        # Persist to SQLite
+        upsert_round_summary(
+            n,
+            failure_type=injector_name,
+            target_service=hardcoded_target,
+            injected_at=injected_at,
+            anomaly_confirmed_at=anomaly_confirmed_at,
+            recovered_at=recovered_at,
+            recovery_seconds=round_log["recovery_time_seconds"],
+            sla_target_seconds=sla_result["recovery_target_seconds"],
+            sla_met=int(sla_result["recovery_met"]),
+            rca_result=json.dumps(rca_result),
+            decision=json.dumps(decision),
+            guardrails_triggered=json.dumps(round_log["guardrails_triggered"]),
+            status=final_status,
+        )
+
         summaries.append(round_log)
 
-        # ── p. Wait for metric normalization ─────────────────────────────
+        # ── q. Wait for metric normalization ─────────────────────────────
         if n < len(ROUNDS):
             print(f"\n[orchestrator] Waiting {METRIC_NORMALIZATION_WAIT}s for metric normalization…")
             await asyncio.sleep(METRIC_NORMALIZATION_WAIT)
 
-    # ── Final summary table ───────────────────────────────────────────────────
+    # ── Final summary table + coverage report ─────────────────────────────────
     _print_summary(summaries)
+
+    generate_coverage_report(summaries)
+
     all_log_path = LOGS_DIR / "all_rounds_summary.json"
     all_log_path.write_text(json.dumps(summaries, indent=2, default=str))
     print(f"\n[orchestrator] All-rounds summary saved → {all_log_path}")
@@ -324,6 +416,23 @@ async def _try_reverse(injector_name: str, injector_mod: Any, service: str) -> N
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="NovaSurge Chaos Orchestrator")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        default=False,
+        help="Print what would happen without making any cluster changes.",
+    )
+    args = parser.parse_args()
+
     os.environ.setdefault("NOVASURGE_MOCK_K8S", "true")
     os.environ.setdefault("NOVASURGE_MOCK_ANOMALY", "true")
-    asyncio.run(run())
+
+    if args.dry_run:
+        print("[orchestrator] *** DRY-RUN MODE — no cluster changes will be made ***\n")
+        # Force preflight into dry-run mode by monkey-patching the env
+        os.environ["NOVASURGE_DRY_RUN"] = "true"
+
+    asyncio.run(run(dry_run=args.dry_run))

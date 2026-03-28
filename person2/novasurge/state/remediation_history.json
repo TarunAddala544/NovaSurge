@@ -7,6 +7,10 @@
     {
       "success": true,
       "ts": "2026-03-27T17:26:25.510010"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-28T06:53:37.980919+00:00"
     }
   ],
   "order-service::cache_flush": [
@@ -19,6 +23,18 @@
     {
       "success": true,
       "ts": "2026-03-27T18:44:54.862592+00:00"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-28T06:56:16.496152+00:00"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-28T07:04:45.924049+00:00"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-28T07:12:40.160038+00:00"
     }
   ],
   "product-service::hpa_scaleout": [
@@ -37,6 +53,28 @@
     {
       "success": false,
       "ts": "2026-03-27T18:53:30.786346+00:00"
+    }
+  ],
+  "product-service::cache_flush": [
+    {
+      "success": false,
+      "ts": "2026-03-28T06:58:59.908452+00:00"
+    }
+  ],
+  "order-service::hpa_scaleout": [
+    {
+      "success": true,
+      "ts": "2026-03-28T07:02:07.296498+00:00"
+    },
+    {
+      "success": true,
+      "ts": "2026-03-28T07:10:01.741996+00:00"
+    }
+  ],
+  "product-service::pod_restart": [
+    {
+      "success": true,
+      "ts": "2026-03-28T07:07:23.355988+00:00"
     }
   ]
 }

@@ -9,9 +9,7 @@ import random
 import logging
 from datetime import datetime, timezone
 
-from kubernetes import client as k8s_client
-
-from novasurge.k8s_client import get_clients, NAMESPACE
+from novasurge.k8s_client import get_clients, USE_MOCK, NAMESPACE
 
 logger = logging.getLogger("novasurge.injectors.pod_deletion")
 
@@ -60,10 +58,16 @@ def inject(service: str) -> dict:
     logger.info(f"[pod_deletion] Deleting pod={pod_name} from service={service}")
     print(f"  💥 [pod_deletion] Deleting pod: {pod_name}")
 
+    if USE_MOCK:
+        delete_opts = None
+    else:
+        from kubernetes import client as k8s_client
+        delete_opts = k8s_client.V1DeleteOptions(grace_period_seconds=0)
+
     core_v1.delete_namespaced_pod(
         name=pod_name,
         namespace=NAMESPACE,
-        body=k8s_client.V1DeleteOptions(grace_period_seconds=0),
+        body=delete_opts,
     )
 
     logger.info(f"[pod_deletion] Pod {pod_name} deleted. K8s will reschedule automatically.")

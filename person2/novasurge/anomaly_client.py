@@ -147,22 +147,30 @@ def build_mock_metrics_snapshot(anomaly_payload: dict) -> dict:
     snapshot = {}
     for svc in SERVICES:
         if svc == affected:
+            lat_ratio = 1.5 + deltas.get("p99_latency", 1.0) * 0.5
+            err_delta = deltas.get("error_rate", 0.05)
             snapshot[svc] = {
                 "p99_latency": 200 + deltas.get("p99_latency", 1.0) * 100,
-                "error_rate": 0.02 + deltas.get("error_rate", 0.05),
+                "error_rate": 0.02 + err_delta,
+                # Keys used by rca._is_deviated()
+                "latency_ratio": round(lat_ratio, 2),
+                "error_rate_delta": round(err_delta, 3),
                 "http_request_rate": random.uniform(40, 80),
                 "baseline_request_rate": 50.0,
                 "replica_count": random.randint(1, 2),
-                "deviation_window": 0,  # first to deviate
+                "timestamp_offset_seconds": 0,  # first to deviate
             }
         else:
             snapshot[svc] = {
                 "p99_latency": random.uniform(20, 80),
                 "error_rate": random.uniform(0.001, 0.01),
+                # Keys used by rca._is_deviated() — normal range
+                "latency_ratio": round(random.uniform(0.9, 1.2), 2),
+                "error_rate_delta": round(random.uniform(0.001, 0.03), 3),
                 "http_request_rate": random.uniform(30, 60),
                 "baseline_request_rate": 50.0,
                 "replica_count": random.randint(2, 4),
-                "deviation_window": random.randint(1, 4),  # deviated later
+                "timestamp_offset_seconds": random.randint(1, 4),
             }
 
     return snapshot
