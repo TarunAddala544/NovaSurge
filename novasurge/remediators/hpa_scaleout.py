@@ -26,7 +26,7 @@ async def remediate(service: str) -> dict:
     }
     print(f"[hpa_scaleout] Patching HPA for {service} → min=2 max=6")
     autoscaling_v2.patch_namespaced_horizontal_pod_autoscaler(
-        name=service,
+        name=f"{service}-hpa",
         namespace=NAMESPACE,
         body=patch,
     )
@@ -42,7 +42,7 @@ async def remediate(service: str) -> dict:
         await asyncio.sleep(poll_interval)
         elapsed += poll_interval
         hpa = autoscaling_v2.read_namespaced_horizontal_pod_autoscaler(
-            name=service, namespace=NAMESPACE
+            name=f"{service}-hpa", namespace=NAMESPACE
         )
         desired = hpa.status.desired_replicas or 0
         ready = hpa.status.current_replicas or 0

@@ -1,0 +1,47 @@
+{
+  "api-gateway": {
+    "http_request_rate": 50.0,
+    "error_rate": 0.005,
+    "p99_latency": 100.0,
+    "cpu_usage": 0.2,
+    "memory_usage": 150.0,
+    "active_connections": 30.0,
+    "anomaly_score": 0.07234521134586674
+  },
+  "product-service": {
+    "http_request_rate": 35.0,
+    "error_rate": 0.003,
+    "p99_latency": 55.0,
+    "cpu_usage": 0.12,
+    "memory_usage": 200.0,
+    "active_connections": 20.0,
+    "anomaly_score": 0.10317490315223599
+  },
+  "order-service": {
+    "http_request_rate": 15.0,
+    "error_rate": 0.012,
+    "p99_latency": 200.0,
+    "cpu_usage": 0.22,
+    "memory_usage": 170.0,
+    "active_connections": 10.0,
+    "anomaly_score": 0.11155016966452036
+  },
+  "payment-service": {
+    "http_request_rate": 11.5,
+    "error_rate": 0.025,
+    "p99_latency": 275.0,
+    "cpu_usage": 0.2,
+    "memory_usage": 140.0,
+    "active_connections": 6.5,
+    "anomaly_score": 0.09470912532273196
+  },
+  "notification-service": {
+    "http_request_rate": 7.5,
+    "error_rate": 0.002,
+    "p99_latency": 35.0,
+    "cpu_usage": 0.06,
+    "memory_usage": 100.0,
+    "active_connections": 3.5,
+    "anomaly_score": 0.12196247772048563
+  }
+}

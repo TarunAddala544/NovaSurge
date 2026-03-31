@@ -67,7 +67,7 @@ def _ensure_tc(core_v1, pod_name: str) -> None:
     # Verify again
     verify = _exec_in_pod(core_v1, pod_name, ["which", "tc"])
     if not verify or "/tc" not in str(verify):
-        raise RuntimeError(f"tc still not available after installing iproute2 in pod={pod_name}")
+        return {"success": False, "skipped": True, "reason": "tc not available in pod, skipping latency injection"}
     logger.info("[latency_injection] tc now available after install")
 
 

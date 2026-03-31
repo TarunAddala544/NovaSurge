@@ -42,7 +42,7 @@ def inject(service: str) -> dict:
     # Read current HPA
     logger.info(f"[replica_reduction] Reading HPA for service={service}")
     hpa = autoscaling_v2.read_namespaced_horizontal_pod_autoscaler(
-        name=service,
+        name=f"{service}-hpa",
         namespace=NAMESPACE,
     )
 
@@ -67,7 +67,7 @@ def inject(service: str) -> dict:
     logger.info(f"[replica_reduction] Patching HPA={service} → minReplicas=1 maxReplicas=1")
     print(f"  💥 [replica_reduction] Reducing replicas of {service} to 1")
     autoscaling_v2.patch_namespaced_horizontal_pod_autoscaler(
-        name=service,
+        name=f"{service}-hpa",
         namespace=NAMESPACE,
         body=patch_body,
     )
@@ -112,7 +112,7 @@ def reverse(service: str) -> dict:
     logger.info(f"[replica_reduction] Restoring HPA={service} to min={state['min_replicas']} max={state['max_replicas']}")
     print(f"  ✅ [replica_reduction] Restoring {service} HPA to original spec")
     autoscaling_v2.patch_namespaced_horizontal_pod_autoscaler(
-        name=service,
+        name=f"{service}-hpa",
         namespace=NAMESPACE,
         body=patch_body,
     )

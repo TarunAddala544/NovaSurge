@@ -1,0 +1,61 @@
+{
+  "round": 1,
+  "failure_type": "pod_deletion",
+  "target_service": "order-service",
+  "injected_at": "2026-03-28T21:49:23.249712+00:00",
+  "anomaly_confirmed_at": "2026-03-28T21:50:26.585422+00:00",
+  "rca_result": {
+    "true_origin": "order-service",
+    "confidence": 0.83,
+    "call_path": [
+      "api-gateway",
+      "order-service"
+    ],
+    "reasoning": "'order-service' shows pod_crash deviation independently of its callers (api-gateway). No upstream caller metrics are anomalous, indicating the fault originated in 'order-service' itself. Severity score: 0.70."
+  },
+  "decision": {
+    "service": "order-service",
+    "anomaly_type": "pod_crash",
+    "priority": 5.6,
+    "primary_remediation": "pod_restart",
+    "fallback_remediation": "hpa_scaleout",
+    "confidence": 0.78,
+    "guardrails_triggered": [],
+    "reasoning_text": "Service 'order-service' | anomaly='pod_crash' | severity=0.70 | impact_weight=8 | priority=5.6000 | Initial remediation plan: primary='pod_restart', fallback='hpa_scaleout' | Final decision: apply 'pod_restart' on 'order-service' (fallback='hpa_scaleout', confidence=0.780, guardrails=none)."
+  },
+  "remediator": "pod_restart",
+  "recovered_at": "2026-03-28T21:50:28.881668+00:00",
+  "recovery_time_seconds": 2.12,
+  "health_confirmed": true,
+  "guardrails_triggered": [],
+  "preflight": {
+    "target": "order-service",
+    "failure_type": "pod_deletion",
+    "dependents": [
+      "api-gateway"
+    ],
+    "blast_score": 1,
+    "estimated_affected_users_pct": 100,
+    "system_health_pct": 100.0,
+    "current_load_ratio": 3.7,
+    "degraded_services_count": 0,
+    "injection_risk": "MEDIUM",
+    "go_nogo": "GO",
+    "nogo_reason": null,
+    "sla_target_seconds": 30,
+    "business_impact_weight": 8,
+    "evaluated_at": "2026-03-28T21:49:23.248720",
+    "dry_run": false
+  },
+  "sla_result": {
+    "recovery_target_seconds": 30,
+    "recovery_actual_seconds": 2.12,
+    "recovery_met": true,
+    "recovery_margin_seconds": 27.88,
+    "detection_target_seconds": 15,
+    "detection_actual_seconds": 63.34,
+    "detection_met": false,
+    "both_met": false
+  },
+  "status": "HEALTHY"
+}

@@ -32,7 +32,6 @@ export default function DecisionTraceTable({ streamData }) {
   const [rows, setRows] = useState(MOCK_ROUNDS);
   const seenRounds = useRef(new Set(MOCK_ROUNDS.map((r) => r.round)));
 
-  // Live round_status update from WebSocket
   useEffect(() => {
     if (!streamData?.round_status) return;
     const rs = streamData.round_status;
@@ -46,28 +45,20 @@ export default function DecisionTraceTable({ streamData }) {
         service: streamData?.anomaly?.affected_service || "—",
         if_score: streamData?.anomaly?.iforest_score ?? null,
         decision:
-          rs.phase === "RECOVERING"
-            ? "hpa-scaleout"
-            : rs.phase === "DETECTING"
-            ? "analyzing"
-            : "—",
-        remediator:
-          rs.phase === "RECOVERING" ? "HPARemediator" : "—",
-        recovery_s:
-          rs.phase === "IDLE" ? rs.elapsed_seconds : null,
+          rs.phase === "RECOVERING" ? "hpa-scaleout"
+          : rs.phase === "DETECTING" ? "analyzing"
+          : "—",
+        remediator: rs.phase === "RECOVERING" ? "HPARemediator" : "—",
+        recovery_s: rs.phase === "IDLE" ? rs.elapsed_seconds : null,
         rca_origin: "CPU limit exhaustion",
         status:
-          rs.phase === "IDLE"
-            ? "COMPLETE"
-            : rs.phase === "RECOVERING"
-            ? "RECOVERING"
-            : "DETECTING",
+          rs.phase === "IDLE" ? "COMPLETE"
+          : rs.phase === "RECOVERING" ? "RECOVERING"
+          : "DETECTING",
       };
 
       if (existing) {
-        return prev.map((r) =>
-          r.round === rs.current_round ? updated : r
-        );
+        return prev.map((r) => (r.round === rs.current_round ? updated : r));
       } else {
         seenRounds.current.add(rs.current_round);
         return [updated, ...prev].slice(0, 20);
@@ -75,20 +66,27 @@ export default function DecisionTraceTable({ streamData }) {
     });
   }, [streamData]);
 
-  // Poll GET /rounds every 10 seconds
   useEffect(() => {
     async function fetchRounds() {
       try {
-        const res = await fetch("http://localhost:8000/rounds");
+        const res = await fetch("http://172.20.66.195:8000/rounds");
         if (!res.ok) return;
         const data = await res.json();
         if (!Array.isArray(data)) return;
-        setRows(data.slice().reverse());
+        const normalized = data.slice().reverse().map(r => ({
+          ...r,
+          service: r.target_service || r.service || '—',
+          decision: r.decision?.primary_remediation || r.decision || '—',
+          rca_origin: r.rca_result?.true_origin || r.rca_origin || '—',
+          recovery_s: r.recovery_time_seconds ?? r.recovery_s ?? null,
+          if_score: r.if_score ?? null,
+          status: r.status || 'COMPLETE',
+        }));
+        setRows(normalized);
       } catch {
         // backend not up — use mock/WS data
       }
     }
-
     fetchRounds();
     const timer = setInterval(fetchRounds, ROUNDS_POLL_MS);
     return () => clearInterval(timer);
@@ -133,23 +131,19 @@ export default function DecisionTraceTable({ streamData }) {
                 <td className="px-2 py-1.5 text-blue-300 whitespace-nowrap">{row.service}</td>
                 <td className="px-2 py-1.5 font-mono text-amber-300">
                   {row.if_score !== null && row.if_score !== undefined
-                    ? row.if_score.toFixed(2)
-                    : "—"}
+                    ? row.if_score.toFixed(2) : "—"}
                 </td>
-                <td className="px-2 py-1.5 text-slate-300 whitespace-nowrap">{row.decision}</td>
+                <td className="px-2 py-1.5 text-slate-300 whitespace-nowrap">{typeof row.decision === 'object' ? row.decision?.primary_remediation || '—' : row.decision}</td>
                 <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap">{row.remediator}</td>
                 <td className={`px-2 py-1.5 font-mono ${recoveryColor(row.recovery_s)}`}>
                   {row.recovery_s !== null && row.recovery_s !== undefined
-                    ? `${row.recovery_s}s`
-                    : "—"}
+                    ? `${row.recovery_s}s` : "—"}
                 </td>
                 <td className="px-2 py-1.5 text-slate-400 whitespace-nowrap max-w-[120px] truncate">
                   {row.rca_origin}
                 </td>
                 <td className="px-2 py-1.5">
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${statusPill(row.status)}`}
-                  >
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${statusPill(row.status)}`}>
                     {row.status}
                   </span>
                 </td>

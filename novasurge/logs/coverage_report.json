@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-03-28T21:57:59.774584",
+  "total_rounds": 5,
+  "services_tested": [
+    "product-service",
+    "order-service",
+    "payment-service"
+  ],
+  "services_untested": [
+    "api-gateway",
+    "notification-service"
+  ],
+  "failure_types_covered": [
+    "network_partition",
+    "cpu_throttle",
+    "replica_reduction",
+    "pod_deletion",
+    "latency_injection"
+  ],
+  "successful_recoveries": 5,
+  "sla_met_count": 5,
+  "sla_breach_count": 0,
+  "mean_ttr_seconds": 2.67,
+  "mean_ttd_seconds": 64.23,
+  "min_recovery_seconds": 2.11,
+  "max_recovery_seconds": 3.05,
+  "guardrails_triggered_total": 0,
+  "resilience_score": 60.0,
+  "score_breakdown": "FAIR \u2014 Recovery functional but detection or speed needs tuning."
+}

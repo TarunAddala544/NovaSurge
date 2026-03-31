@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 
 const PHASE_LABELS = {
-  DETECTING: "DETECTED",
+  DETECTING:  "DETECTED",
   RECOVERING: "RECOVERED",
-  GUARDRAIL: "GUARDRAIL",
+  GUARDRAIL:  "GUARDRAIL",
 };
 
 const PHASE_COLORS = {
@@ -18,15 +18,13 @@ export default function ReasoningFeed({ streamData }) {
   const idRef = useRef(0);
 
   useEffect(() => {
-    if (!streamData || !streamData.reasoning) return;
+    if (!streamData) return;
+    if (!streamData.reasoning) return;
     if (lastTextRef.current === streamData.reasoning) return;
     lastTextRef.current = streamData.reasoning;
 
-    const rawPhase = streamData?.round_status?.phase || "DETECTING";
-    // Map WS phase → display label
-    const phase =
-      PHASE_LABELS[rawPhase] ??
-      (rawPhase === "RECOVERING" ? "RECOVERED" : "DETECTED");
+    const rawPhase = streamData?.round_status?.phase ?? "DETECTING";
+    const phase = PHASE_LABELS[rawPhase] ?? "DETECTED";
 
     const newEntry = {
       id: idRef.current++,
@@ -46,34 +44,26 @@ export default function ReasoningFeed({ streamData }) {
           Waiting for reasoning events…
         </div>
       )}
-
       <div className="flex flex-col gap-2 overflow-hidden">
         {logs.map((log) => (
           <div
             key={log.id}
-            className="reasoning-entry p-3 rounded-lg bg-slate-900 border border-slate-700 animate-fadeIn"
+            className="p-3 rounded-lg bg-slate-900 border border-slate-700"
           >
             <div className="flex items-center gap-2 mb-1 flex-wrap">
-              <span className="timestamp text-slate-500 text-xs">
-                [{log.timestamp}]
-              </span>
-
+              <span className="text-slate-500 text-xs">[{log.timestamp}]</span>
               <span
-                className={`phase-badge px-2 py-0.5 text-xs font-bold rounded ${
+                className={`px-2 py-0.5 text-xs font-bold rounded ${
                   PHASE_COLORS[log.phase] || "bg-slate-600 text-white"
-                } ${log.phase}`}
+                }`}
               >
                 {log.phase}
               </span>
-
-              <span className="service-badge px-2 py-0.5 text-xs rounded bg-blue-700 text-white font-semibold">
+              <span className="px-2 py-0.5 text-xs rounded bg-blue-700 text-white font-semibold">
                 {log.service}
               </span>
             </div>
-
-            <p className="reasoning-text text-slate-200 leading-snug text-sm">
-              {log.text}
-            </p>
+            <p className="text-slate-200 leading-snug text-sm">{log.text}</p>
           </div>
         ))}
       </div>

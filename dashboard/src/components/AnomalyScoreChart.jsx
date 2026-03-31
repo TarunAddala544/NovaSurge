@@ -76,7 +76,7 @@ export default function AnomalyScoreChart({ buffer }) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height={300} minHeight={200}>
         <LineChart
           data={chartData}
           margin={{ top: 8, right: 8, left: -10, bottom: 0 }}

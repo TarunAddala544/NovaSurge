@@ -204,7 +204,11 @@ async def broadcast_loop():
     while True:
         try:
             # Run inference step
-            anomaly, metrics, scores, lstm_results = run_inference_step()
+            result = run_inference_step()
+            if result is None:
+                await asyncio.sleep(5.0)
+                continue
+            anomaly, metrics, scores, lstm_results = result
 
             # Get current timestamp
             timestamp = datetime.now().isoformat()
@@ -297,3 +301,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "platform": "novasurge"}

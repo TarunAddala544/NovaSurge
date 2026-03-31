@@ -1,7 +1,7 @@
 {
   "round": 5,
-  "status": "FAILED",
-  "updated_at": "2026-03-28T07:14:10.416406+00:00",
+  "status": "HEALTHY",
+  "updated_at": "2026-03-28T21:57:59.752121+00:00",
   "remediator": "hpa_scaleout",
-  "health_confirmed": false
+  "health_confirmed": true
 }

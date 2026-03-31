@@ -88,7 +88,7 @@ export default function LSTMPredictionChart({ buffer, streamData }) {
       )}
 
       <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={300} minHeight={200}>
           <AreaChart
             data={chartData}
             margin={{ top: 4, right: 4, left: -20, bottom: 0 }}

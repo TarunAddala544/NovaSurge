@@ -11,7 +11,7 @@ interface stays consistent with the other remediators.
 import asyncio
 from datetime import datetime, timezone
 
-REDIS_HOST = "redis-service.shopfusion.svc.cluster.local"
+REDIS_HOST = "redis-service-master.shopfusion.svc.cluster.local"
 REDIS_PORT = 6379
 KEY_PATTERN = "products:*"
 

@@ -11,7 +11,7 @@ const EDGE_COLOR_NORMAL   = "#475569";
 const EDGE_COLOR_DEGRADED = "#f59e0b";
 
 function edgeWidth(weight) {
-  return 1 + (weight ?? 0.5) * 3; // 1–4px
+  return 1 + (weight ?? 0.5) * 3;
 }
 
 export default function DependencyGraph({ streamData }) {
@@ -21,7 +21,6 @@ export default function DependencyGraph({ streamData }) {
   const gLinksRef    = useRef(null);
   const gNodesRef    = useRef(null);
 
-  // ── Build/update the graph whenever streamData changes ──────────────
   useEffect(() => {
     const container = containerRef.current;
     const svg       = d3.select(svgRef.current);
@@ -35,20 +34,17 @@ export default function DependencyGraph({ streamData }) {
 
     svg.attr("width", W).attr("height", H).attr("viewBox", `0 0 ${W} ${H}`);
 
-    // ── Identify anomalous nodes ─────────────────────────────────────
     const anomalousIds = new Set(
       graph.nodes.filter((n) => n.health === "anomaly").map((n) => n.id)
     );
 
-    // ── Clone data so D3 can mutate x/y ──────────────────────────────
     const nodesData = graph.nodes.map((n) => ({ ...n }));
     const linksData = graph.edges.map((e) => ({ ...e }));
 
-    // ── LINKS (enter/update/exit) ─────────────────────────────────────
     const gLinks = gLinksRef.current;
     const lSel = gLinks
       .selectAll("line")
-      .data(linksData, (d) => `${d.source?.id ?? d.source}→${d.target?.id ?? d.target}`);
+      .data(linksData, (d) => `${d.source?.id ?? d.source}->${d.target?.id ?? d.target}`);
 
     const lEnter = lSel.enter().append("line");
     const lines  = lEnter.merge(lSel);
@@ -71,7 +67,6 @@ export default function DependencyGraph({ streamData }) {
 
     lSel.exit().remove();
 
-    // ── NODES (enter/update/exit) ─────────────────────────────────────
     const gNodes  = gNodesRef.current;
     const nSel    = gNodes.selectAll("g.node").data(nodesData, (d) => d.id);
     const nEnter  = nSel.enter().append("g").attr("class", "node");
@@ -97,14 +92,12 @@ export default function DependencyGraph({ streamData }) {
       .attr("filter", (d) => d.health === "anomaly" ? "url(#glow-red)" : "none");
 
     nodes.select("text")
-      .text((d) => {
-        // Shorten labels so they fit
-        return d.id
+      .text((d) =>
+        d.id
           .replace("-service", "")
-          .replace("api-gateway", "gateway");
-      });
+          .replace("api-gateway", "gateway")
+      );
 
-    // ── SIMULATION ────────────────────────────────────────────────────
     if (simRef.current) simRef.current.stop();
 
     const sim = d3
@@ -130,7 +123,6 @@ export default function DependencyGraph({ streamData }) {
     return () => sim.stop();
   }, [streamData]);
 
-  // ── Resize observer: re-set SVG size when container resizes ─────────
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -164,7 +156,6 @@ export default function DependencyGraph({ streamData }) {
             </feMerge>
           </filter>
         </defs>
-        {/* Attach refs to <g> elements so enter/update/exit stays stable */}
         <g ref={(el) => { gLinksRef.current = d3.select(el); }} />
         <g ref={(el) => { gNodesRef.current = d3.select(el); }} />
       </svg>

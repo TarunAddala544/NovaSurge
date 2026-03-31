@@ -64,7 +64,7 @@ export default function App() {
           )}
           {streamData?.round_status && (
             <span className="text-slate-500">
-              Round {streamData.round_status.current_round} ·{" "}
+              Round {streamData.round_status.round} ·{" "}
               <span className="text-amber-400">{streamData.round_status.phase}</span>
             </span>
           )}

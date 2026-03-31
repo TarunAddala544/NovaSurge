@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { MOCK_STREAM } from "../constants/mockData";
 
-const WS_URL = "ws://localhost:8000/ws/stream";
+const WS_URL = "ws://172.20.66.195:8000/ws/stream";
 const RECONNECT_MS = 3000;
 const BUFFER_SIZE = 60;
 const MOCK_INTERVAL_MS = 2000;

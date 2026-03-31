@@ -1,0 +1,62 @@
+{
+  "round": 3,
+  "failure_type": "network_partition",
+  "target_service": "product-service",
+  "injected_at": "2026-03-28T21:53:03.838562+00:00",
+  "anomaly_confirmed_at": "2026-03-28T21:54:04.977157+00:00",
+  "rca_result": {
+    "true_origin": "product-service",
+    "confidence": 0.83,
+    "call_path": [
+      "api-gateway",
+      "product-service"
+    ],
+    "reasoning": "'product-service' shows network_partition deviation independently of its callers (api-gateway, order-service). No upstream caller metrics are anomalous, indicating the fault originated in 'product-service' itself. Severity score: 0.70."
+  },
+  "decision": {
+    "service": "product-service",
+    "anomaly_type": "network_partition",
+    "priority": 4.2,
+    "primary_remediation": "pod_restart",
+    "fallback_remediation": "traffic_reroute",
+    "confidence": 0.73,
+    "guardrails_triggered": [],
+    "reasoning_text": "Service 'product-service' | anomaly='network_partition' | severity=0.70 | impact_weight=6 | priority=4.2000 | Initial remediation plan: primary='traffic_reroute', fallback='pod_restart' | Confidence 0.000 below threshold 0.4 \u2014 escalating from 'traffic_reroute' to fallback 'pod_restart'. | Final decision: apply 'pod_restart' on 'product-service' (fallback='traffic_reroute', confidence=0.730, guardrails=none)."
+  },
+  "remediator": "pod_restart",
+  "recovered_at": "2026-03-28T21:54:07.263324+00:00",
+  "recovery_time_seconds": 2.11,
+  "health_confirmed": true,
+  "guardrails_triggered": [],
+  "preflight": {
+    "target": "product-service",
+    "failure_type": "network_partition",
+    "dependents": [
+      "api-gateway",
+      "order-service"
+    ],
+    "blast_score": 2,
+    "estimated_affected_users_pct": 100,
+    "system_health_pct": 100.0,
+    "current_load_ratio": 1.29,
+    "degraded_services_count": 0,
+    "injection_risk": "MEDIUM",
+    "go_nogo": "GO",
+    "nogo_reason": null,
+    "sla_target_seconds": 60,
+    "business_impact_weight": 6,
+    "evaluated_at": "2026-03-28T21:53:03.837446",
+    "dry_run": false
+  },
+  "sla_result": {
+    "recovery_target_seconds": 60,
+    "recovery_actual_seconds": 2.11,
+    "recovery_met": true,
+    "recovery_margin_seconds": 57.89,
+    "detection_target_seconds": 25,
+    "detection_actual_seconds": 61.14,
+    "detection_met": false,
+    "both_met": false
+  },
+  "status": "HEALTHY"
+}

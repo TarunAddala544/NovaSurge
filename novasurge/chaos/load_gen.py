@@ -67,7 +67,7 @@ def _post_orders_request(base_url: str) -> tuple[str, str, dict]:
     payload = {
         "product_id": random.randint(1, 20),
         "quantity": random.randint(1, 5),
-        "customer_id": f"cust-{random.randint(1000, 9999)}",
+        "user_id": f"user-{random.randint(1, 100)}",
     }
     return "POST", f"{base_url}/orders", {"json": payload}
 

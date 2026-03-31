@@ -1,0 +1,62 @@
+{
+  "round": 2,
+  "failure_type": "cpu_throttle",
+  "target_service": "payment-service",
+  "injected_at": "2026-03-28T21:51:14.181387+00:00",
+  "anomaly_confirmed_at": "2026-03-28T21:52:15.426922+00:00",
+  "rca_result": {
+    "true_origin": "payment-service",
+    "confidence": 0.83,
+    "call_path": [
+      "api-gateway",
+      "payment-service"
+    ],
+    "reasoning": "'payment-service' shows cpu_throttle deviation independently of its callers (api-gateway, order-service). No upstream caller metrics are anomalous, indicating the fault originated in 'payment-service' itself. Severity score: 0.70."
+  },
+  "decision": {
+    "service": "payment-service",
+    "anomaly_type": "cpu_throttle",
+    "priority": 7.0,
+    "primary_remediation": "hpa_scaleout",
+    "fallback_remediation": "cache_flush",
+    "confidence": 0.73,
+    "guardrails_triggered": [],
+    "reasoning_text": "Service 'payment-service' | anomaly='cpu_throttle' | severity=0.70 | impact_weight=10 | priority=7.0000 | Initial remediation plan: primary='hpa_scaleout', fallback='cache_flush' | Final decision: apply 'hpa_scaleout' on 'payment-service' (fallback='cache_flush', confidence=0.730, guardrails=none)."
+  },
+  "remediator": "hpa_scaleout",
+  "recovered_at": "2026-03-28T21:52:18.740822+00:00",
+  "recovery_time_seconds": 3.05,
+  "health_confirmed": true,
+  "guardrails_triggered": [],
+  "preflight": {
+    "target": "payment-service",
+    "failure_type": "cpu_throttle",
+    "dependents": [
+      "api-gateway",
+      "order-service"
+    ],
+    "blast_score": 2,
+    "estimated_affected_users_pct": 100,
+    "system_health_pct": 100.0,
+    "current_load_ratio": 4.19,
+    "degraded_services_count": 0,
+    "injection_risk": "MEDIUM",
+    "go_nogo": "GO",
+    "nogo_reason": null,
+    "sla_target_seconds": 45,
+    "business_impact_weight": 10,
+    "evaluated_at": "2026-03-28T21:51:14.180229",
+    "dry_run": false
+  },
+  "sla_result": {
+    "recovery_target_seconds": 45,
+    "recovery_actual_seconds": 3.05,
+    "recovery_met": true,
+    "recovery_margin_seconds": 41.95,
+    "detection_target_seconds": 20,
+    "detection_actual_seconds": 61.25,
+    "detection_met": false,
+    "both_met": false
+  },
+  "status": "HEALTHY"
+}
